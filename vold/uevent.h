@@ -18,4 +18,8 @@
 #ifndef _UEVENT_MSG_H
 #define _UEVENT_MSG_H
 
+#define MAX_UEVENT_NAME_LEN 512
+#define POWER_UEVENT_NAME_CHARGE_NOW "ro.power_supply.uevent.name.capacity.now"
+#define POWER_UEVENT_NAME_CHARGE_FULL "ro.power_supply.uevent.name.capacity.full"
+
 #endif
