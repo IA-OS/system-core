@@ -30,6 +30,7 @@ TOOLS := \
 	dmesg \
 	route \
 	hd \
+	hotplug \
 	dd \
 	df \
 	getprop \
@@ -41,7 +42,7 @@ TOOLS := \
 	printenv \
 	smd \
 	chmod \
-    chown \
+	chown \
 	newfs_msdos \
 	netstat \
 	ioctl \
@@ -51,6 +52,9 @@ TOOLS := \
 	iftop \
 	id \
 	vmstat
+
+SBIN_TOOLS := \
+	hotplug
 
 LOCAL_SRC_FILES:= \
 	toolbox.c \
@@ -64,8 +68,6 @@ LOCAL_MODULE:= toolbox
 #
 include $(BUILD_EXECUTABLE)
 
-$(LOCAL_PATH)/toolbox.c: $(intermediates)/tools.h
-
 TOOLS_H := $(intermediates)/tools.h
 $(TOOLS_H): PRIVATE_TOOLS := $(TOOLS)
 $(TOOLS_H): PRIVATE_CUSTOM_TOOL = echo "/* file generated automatically */" > $@ ; for t in $(PRIVATE_TOOLS) ; do echo "TOOL($$t)" >> $@ ; done
@@ -73,15 +75,18 @@ $(TOOLS_H): $(LOCAL_PATH)/Android.mk
 $(TOOLS_H):
 	$(transform-generated-source)
 
+$(LOCAL_PATH)/toolbox.c: $(TOOLS_H)
+
 # Make #!/system/bin/toolbox launchers for each tool.
 #
 SYMLINKS := $(addprefix $(TARGET_OUT)/bin/,$(TOOLS))
 $(SYMLINKS): TOOLBOX_BINARY := $(LOCAL_MODULE)
 $(SYMLINKS): $(LOCAL_INSTALLED_MODULE) $(LOCAL_PATH)/Android.mk
 	@echo "Symlink: $@ -> $(TOOLBOX_BINARY)"
-	@mkdir -p $(dir $@)
+	@mkdir -p $(@D)
 	@rm -rf $@
 	$(hide) ln -sf $(TOOLBOX_BINARY) $@
+	$(hide) $(if $(filter $(SBIN_TOOLS),$(@F)),ln -sf ../system/bin/$(@F) $(TARGET_ROOT_OUT_SBIN))
 
 ALL_DEFAULT_INSTALLED_MODULES += $(SYMLINKS)
 
