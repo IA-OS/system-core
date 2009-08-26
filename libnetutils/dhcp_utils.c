@@ -131,16 +131,18 @@ int dhcp_do_request(const char *interface,
     char prop_value[PROPERTY_VALUE_MAX] = {'\0'};
     const char *ctrl_prop = "ctl.start";
     const char *desired_status = "running";
+    char daemon_name[PROPERTY_KEY_MAX];
 
     snprintf(result_prop_name, sizeof(result_prop_name), "%s.%s.result",
             DHCP_PROP_NAME_PREFIX,
             interface);
     /* Erase any previous setting of the dhcp result property */
     property_set(result_prop_name, "");
-
+    snprintf(daemon_name, PROPERTY_KEY_MAX,"%s%s",DAEMON_NAME,interface);
     /* Start the daemon and wait until it's ready */
-    property_set(ctrl_prop, DAEMON_NAME);
-    if (wait_for_property(DAEMON_PROP_NAME, desired_status, 10) < 0) {
+    property_set(ctrl_prop, daemon_name);
+    snprintf(daemon_name, PROPERTY_KEY_MAX,"%s%s",DAEMON_PROP_NAME,interface);
+    if (wait_for_property(daemon_name, desired_status, 10) < 0) {
         snprintf(errmsg, sizeof(errmsg), "%s", "Timed out waiting for dhcpcd to start");
         return -1;
     }
@@ -173,13 +175,16 @@ int dhcp_stop(const char *interface)
     char result_prop_name[PROPERTY_KEY_MAX];
     const char *ctrl_prop = "ctl.stop";
     const char *desired_status = "stopped";
+    char daemon_name[PROPERTY_KEY_MAX];
 
     snprintf(result_prop_name, sizeof(result_prop_name), "%s.%s.result",
             DHCP_PROP_NAME_PREFIX,
             interface);
+    snprintf(daemon_name, PROPERTY_KEY_MAX,"%s%s",DAEMON_NAME,interface);
     /* Stop the daemon and wait until it's reported to be stopped */
-    property_set(ctrl_prop, DAEMON_NAME);
-    if (wait_for_property(DAEMON_PROP_NAME, desired_status, 5) < 0) {
+    property_set(ctrl_prop, daemon_name);
+    snprintf(daemon_name, PROPERTY_KEY_MAX,"%s%s",DAEMON_PROP_NAME,interface);
+    if (wait_for_property(daemon_name, desired_status, 5) < 0) {
         return -1;
     }
     property_set(result_prop_name, "failed");
