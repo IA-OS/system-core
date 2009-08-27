@@ -81,7 +81,7 @@ $(LOCAL_PATH)/toolbox.c: $(TOOLS_H)
 #
 SYMLINKS := $(addprefix $(TARGET_OUT)/bin/,$(TOOLS))
 $(SYMLINKS): TOOLBOX_BINARY := $(LOCAL_MODULE)
-$(SYMLINKS): $(LOCAL_INSTALLED_MODULE) $(LOCAL_PATH)/Android.mk
+$(SYMLINKS): $(LOCAL_INSTALLED_MODULE) $(LOCAL_PATH)/Android.mk | $(TARGET_ROOT_OUT_SBIN)
 	@echo "Symlink: $@ -> $(TOOLBOX_BINARY)"
 	@mkdir -p $(@D)
 	@rm -rf $@
