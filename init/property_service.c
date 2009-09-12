@@ -122,11 +122,11 @@ out:
 }
 
 /* (8 header words + 247 toc words) = 1020 bytes */
-/* 1024 bytes header and toc + 247 prop_infos @ 128 bytes = 32640 bytes */
+/* 1024 bytes header and toc + 247 prop_infos */
 
 #define PA_COUNT_MAX  247
 #define PA_INFO_START 1024
-#define PA_SIZE       32768
+#define PA_SIZE  ((PA_INFO_START + sizeof(struct prop_info)*PA_COUNT_MAX) + PAGE_SIZE)
 
 static workspace pa_workspace;
 static prop_info *pa_info_array;
