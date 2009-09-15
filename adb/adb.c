@@ -23,12 +23,17 @@
 #include <errno.h>
 #include <string.h>
 #include <time.h>
+#include <sys/time.h>
 
 #include "sysdeps.h"
 #include "adb.h"
 
 #if !ADB_HOST
 #include <private/android_filesystem_config.h>
+#include <linux/capability.h>
+#include <linux/prctl.h>
+#else
+#include "usb_vendors.h"
 #endif
 
 
@@ -655,10 +660,25 @@ void start_logging(void)
 void start_device_log(void)
 {
     int fd;
-    char    path[100];
+    char    path[PATH_MAX];
+    struct tm now;
+    time_t t;
+    char value[PROPERTY_VALUE_MAX];
 
-    snprintf(path, sizeof path, "/data/adb_%ld.txt", (long)time(NULL));
-    fd = unix_open(path, O_WRONLY | O_CREAT | O_APPEND, 0640);
+    // read the trace mask from persistent property persist.adb.trace_mask
+    // give up if the property is not set or cannot be parsed
+    property_get("persist.adb.trace_mask", value, "");
+    if (sscanf(value, "%x", &adb_trace_mask) != 1)
+        return;
+
+    adb_mkdir("/data/adb", 0775);
+    tzset();
+    time(&t);
+    localtime_r(&t, &now);
+    strftime(path, sizeof(path),
+                "/data/adb/adb-%Y-%m-%d-%H-%M-%S.txt",
+                &now);
+    fd = unix_open(path, O_WRONLY | O_CREAT | O_TRUNC, 0640);
     if (fd < 0)
         return;
 
@@ -669,11 +689,6 @@ void start_device_log(void)
 
     fd = unix_open("/dev/null", O_RDONLY);
     dup2(fd, 0);
-
-    // log everything
-    adb_trace_mask = ~0;
-    // except TRACE_RWX is a bit too verbose
-    adb_trace_mask &= ~TRACE_RWX;
 }
 #endif
 
@@ -817,20 +832,8 @@ int adb_main(int is_daemon)
 {
 #if !ADB_HOST
     int secure = 0;
+    int port;
     char value[PROPERTY_VALUE_MAX];
-
-    // prevent the OOM killer from killing us
-    char text[64];
-    snprintf(text, sizeof text, "/proc/%d/oom_adj", (int)getpid());
-    int fd = adb_open(text, O_WRONLY);
-    if (fd >= 0) {
-        // -17 should make us immune to OOM
-        snprintf(text, sizeof text, "%d", -17);
-        adb_write(fd, text, strlen(text));
-        adb_close(fd);
-    } else {
-       D("adb: unable to open %s\n", text);
-    }
 #endif
 
     atexit(adb_cleanup);
@@ -846,8 +849,9 @@ int adb_main(int is_daemon)
 
 #if ADB_HOST
     HOST = 1;
+    usb_vendors_init();
     usb_init();
-    local_init();
+    local_init(ADB_LOCAL_TRANSPORT_PORT);
 
     if(install_listener("tcp:5037", "*smartsocket*", NULL)) {
         exit(1);
@@ -878,6 +882,11 @@ int adb_main(int is_daemon)
     /* don't listen on port 5037 if we are running in secure mode */
     /* don't run as root if we are running in secure mode */
     if (secure) {
+        struct __user_cap_header_struct header;
+        struct __user_cap_data_struct cap;
+
+        prctl(PR_SET_KEEPCAPS, 1, 0, 0, 0);
+
         /* add extra groups:
         ** AID_ADB to access the USB driver
         ** AID_LOG to read system logs (adb logcat)
@@ -885,14 +894,22 @@ int adb_main(int is_daemon)
         ** AID_INET to diagnose network issues (netcfg, ping)
         ** AID_GRAPHICS to access the frame buffer
         ** AID_NET_BT and AID_NET_BT_ADMIN to diagnose bluetooth (hcidump)
+        ** AID_SDCARD_RW to allow writing to the SD card
         */
         gid_t groups[] = { AID_ADB, AID_LOG, AID_INPUT, AID_INET, AID_GRAPHICS,
-                           AID_NET_BT, AID_NET_BT_ADMIN };
+                           AID_NET_BT, AID_NET_BT_ADMIN, AID_SDCARD_RW };
         setgroups(sizeof(groups)/sizeof(groups[0]), groups);
 
         /* then switch user and group to "shell" */
         setgid(AID_SHELL);
         setuid(AID_SHELL);
+
+        /* set CAP_SYS_BOOT capability, so "adb reboot" will succeed */
+        header.version = _LINUX_CAPABILITY_VERSION;
+        header.pid = 0;
+        cap.effective = cap.permitted = (1 << CAP_SYS_BOOT);
+        cap.inheritable = 0;
+        capset(&header, &cap);
 
         D("Local port 5037 disabled\n");
     } else {
@@ -902,14 +919,19 @@ int adb_main(int is_daemon)
     }
 
         /* for the device, start the usb transport if the
-        ** android usb device exists, otherwise start the
-        ** network transport.
+        ** android usb device exists and "service.adb.tcp"
+        ** is not set, otherwise start the network transport.
         */
-    if(access("/dev/android_adb", F_OK) == 0 ||
-       access("/dev/android", F_OK) == 0) {
+    property_get("service.adb.tcp.port", value, "0");
+    if (sscanf(value, "%d", &port) == 1 && port > 0) {
+        // listen on TCP port specified by service.adb.tcp.port property
+        local_init(port);
+    } else if (access("/dev/android_adb", F_OK) == 0) {
+        // listen on USB
         usb_init();
     } else {
-        local_init();
+        // listen on default port
+        local_init(ADB_LOCAL_TRANSPORT_PORT);
     }
     init_jdwp();
 #endif
@@ -986,6 +1008,43 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
         list_transports(buffer, sizeof(buffer));
         snprintf(buf, sizeof(buf), "OKAY%04x%s",(unsigned)strlen(buffer),buffer);
         D("Wrote device list \n");
+        writex(reply_fd, buf, strlen(buf));
+        return 0;
+    }
+
+    // add a new TCP transport
+    if (!strncmp(service, "connect:", 8)) {
+        char buffer[4096];
+        int port, fd;
+        char* host = service + 8;
+        char* portstr = strchr(host, ':');
+
+        if (!portstr) {
+            snprintf(buffer, sizeof(buffer), "unable to parse %s as <host>:<port>\n", host);
+            goto done;
+        }
+        // zero terminate host by overwriting the ':'
+        *portstr++ = 0;
+        if (sscanf(portstr, "%d", &port) == 0) {
+            snprintf(buffer, sizeof(buffer), "bad port number %s\n", portstr);
+            goto done;
+        }
+
+        fd = socket_network_client(host, port, SOCK_STREAM);
+        if (fd < 0) {
+            snprintf(buffer, sizeof(buffer), "unable to connect to %s:%d\n", host, port);
+            goto done;
+        }
+
+        D("client: connected on remote on fd %d\n", fd);
+        close_on_exec(fd);
+        disable_tcp_nagle(fd);
+        snprintf(buf, sizeof buf, "%s:%d", host, port);
+        register_socket_transport(fd, buf, port, 0);
+        snprintf(buffer, sizeof(buffer), "connected to %s:%d\n", host, port);
+
+done:
+        snprintf(buf, sizeof(buf), "OKAY%04x%s",(unsigned)strlen(buffer),buffer);
         writex(reply_fd, buf, strlen(buf));
         return 0;
     }
@@ -1088,9 +1147,8 @@ int main(int argc, char **argv)
         adb_device_banner = "recovery";
         recovery_mode = 1;
     }
-#if ADB_DEVICE_LOG
+
     start_device_log();
-#endif
     return adb_main(0);
 #endif
 }

@@ -60,8 +60,6 @@ void DUMP(void)
 #endif       
 }
 
-#define MAXARGS 64
-
 #define T_EOF 0
 #define T_TEXT 1
 #define T_NEWLINE 2
@@ -130,6 +128,8 @@ int lookup_keyword(const char *s)
     switch (*s++) {
     case 'c':
         if (!strcmp(s, "apability")) return K_capability;
+        if (!strcmp(s, "hdir")) return K_chdir;
+        if (!strcmp(s, "hroot")) return K_chroot;
         if (!strcmp(s, "lass")) return K_class;
         if (!strcmp(s, "lass_start")) return K_class_start;
         if (!strcmp(s, "lass_stop")) return K_class_stop;
@@ -357,7 +357,7 @@ void parse_new_section(struct parse_state *state, int kw,
 static void parse_config(const char *fn, char *s)
 {
     struct parse_state state;
-    char *args[MAXARGS];
+    char *args[SVC_MAXARGS];
     int nargs;
 
     nargs = 0;
@@ -384,7 +384,7 @@ static void parse_config(const char *fn, char *s)
             }
             break;
         case T_TEXT:
-            if (nargs < MAXARGS) {
+            if (nargs < SVC_MAXARGS) {
                 args[nargs++] = state.text;
             }
             break;
@@ -546,7 +546,7 @@ void queue_all_property_triggers()
                     prop_name[length] = 0;
                     
                     /* does the property exist, and match the trigger value? */
-                    value = property_get((const char *)&prop_name[0]);
+                    value = property_get(prop_name);
                     if (value && !strcmp(equals + 1, value)) {
                         action_add_queue_tail(act);
                     }

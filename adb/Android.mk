@@ -7,7 +7,6 @@ LOCAL_PATH:= $(call my-dir)
 
 # adb host tool
 # =========================================================
-ifneq ($(TARGET_SIMULATOR),true) # not 64 bit clean (also unused with the sim)
 include $(CLEAR_VARS)
 
 # Default to a virtual (sockets) usb interface
@@ -54,10 +53,13 @@ LOCAL_SRC_FILES := \
 	$(USB_SRCS) \
 	shlist.c \
 	utils.c \
+	usb_vendors.c
 
 
 ifneq ($(USE_SYSDEPS_WIN32),)
   LOCAL_SRC_FILES += sysdeps_win32.c
+else
+  LOCAL_SRC_FILES += fdevent.c
 endif
 
 LOCAL_CFLAGS += -O2 -g -DADB_HOST=1  -Wall -Wno-unused-parameter
@@ -74,10 +76,11 @@ include $(BUILD_HOST_EXECUTABLE)
 $(call dist-for-goals,droid,$(LOCAL_BUILT_MODULE))
 
 ifeq ($(HOST_OS),windows)
-$(LOCAL_INSTALLED_MODULE): $(HOST_OUT_EXECUTABLES)/AdbWinApi.dll
+$(LOCAL_INSTALLED_MODULE): \
+    $(HOST_OUT_EXECUTABLES)/AdbWinApi.dll \
+    $(HOST_OUT_EXECUTABLES)/AdbWinUsbApi.dll
 endif
 
-endif
 
 # adbd device daemon
 # =========================================================
@@ -90,9 +93,9 @@ endif
 
 # build adbd for the Linux simulator build
 # so we can use it to test the adb USB gadget driver on x86
-ifeq ($(HOST_OS),linux)
-    BUILD_ADBD := true
-endif
+#ifeq ($(HOST_OS),linux)
+#    BUILD_ADBD := true
+#endif
 
 
 ifeq ($(BUILD_ADBD),true)
@@ -100,6 +103,7 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
 	adb.c \
+	fdevent.c \
 	transport.c \
 	transport_local.c \
 	transport_usb.c \
@@ -111,7 +115,7 @@ LOCAL_SRC_FILES := \
 	remount_service.c \
 	usb_linux_client.c \
 	log_service.c \
-	utils.c \
+	utils.c
 
 LOCAL_CFLAGS := -O2 -g -DADB_HOST=0 -Wall -Wno-unused-parameter
 LOCAL_CFLAGS += -D_XOPEN_SOURCE -D_GNU_SOURCE

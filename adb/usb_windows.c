@@ -446,7 +446,7 @@ int recognized_device(usb_handle* handle) {
 }
 
 void find_devices() {
-	usb_handle* handle = NULL;
+        usb_handle* handle = NULL;
   char entry_buffer[2048];
   char interf_name[2048];
   AdbInterfaceInfo* next_interface = (AdbInterfaceInfo*)(&entry_buffer[0]);
@@ -488,7 +488,7 @@ void find_devices() {
                                 true)) {
             // Lets make sure that we don't duplicate this device
             if (register_new_device(handle)) {
-              register_usb_transport(handle, serial_number);
+              register_usb_transport(handle, serial_number, 1);
             } else {
               D("register_new_device failed for %s\n", interf_name);
               usb_cleanup_handle(handle);

@@ -73,7 +73,7 @@ int blkdev_refresh(blkdev_t *blk)
     }
 
     if (ioctl(fd, BLKGETSIZE, &blk->nr_sec)) {
-        LOGE("Unable to get device size (%m)");
+        LOGE("Unable to get device size (%s)", strerror(errno));
         return -errno;
     }
     close(fd);
@@ -112,7 +112,7 @@ int blkdev_refresh(blkdev_t *blk)
             goto out;
         }
 
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < NDOSPART; i++) {
             struct dos_partition part;
 
             dos_partition_dec(block + DOSPARTOFF + i * sizeof(struct dos_partition), &part);
@@ -134,7 +134,7 @@ int blkdev_refresh(blkdev_t *blk)
         struct dos_partition part;
         int part_no = blk->minor -1;
 
-        if (part_no < 4) {
+        if (part_no < NDOSPART) {
             dos_partition_dec(block + DOSPARTOFF + part_no * sizeof(struct dos_partition), &part);
             blk->part_type = part.dp_typ;
         } else {
@@ -219,7 +219,7 @@ static blkdev_t *_blkdev_create(blkdev_t *disk, char *devpath, int major,
 
     /* Create device nodes */
     char nodepath[255];
-    mode_t mode = 0666 | S_IFBLK;
+    mode_t mode = 0660 | S_IFBLK;
     dev_t dev = (major << 8) | minor;
 
     sprintf(nodepath, "%s/vold/%d:%d", DEVPATH, major, minor);

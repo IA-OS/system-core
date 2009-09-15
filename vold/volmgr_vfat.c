@@ -26,7 +26,7 @@
 
 #define VFAT_DEBUG 0
 
-static char FSCK_MSDOS_PATH[] = "/system/bin/dosfsck";
+static char FSCK_MSDOS_PATH[] = "/system/bin/fsck_msdos";
 
 int vfat_identify(blkdev_t *dev)
 {
@@ -39,6 +39,7 @@ int vfat_identify(blkdev_t *dev)
 int vfat_check(blkdev_t *dev)
 {
     int rc;
+    boolean rw = true;
 
 #if VFAT_DEBUG
     LOG_VOL("vfat_check(%d:%d):", dev->major, dev->minor);
@@ -50,47 +51,40 @@ int vfat_check(blkdev_t *dev)
         return 0;
     }
 
-#ifdef VERIFY_PASS
-    char *args[7];
-    args[0] = FSCK_MSDOS_PATH;
-    args[1] = "-v";
-    args[2] = "-V";
-    args[3] = "-w";
-    args[4] = "-p";
-    args[5] = blkdev_get_devpath(dev);
-    args[6] = NULL;
-    rc = logwrap(6, args);
-    free(args[5]);
-#else
-    char *args[6];
-    args[0] = FSCK_MSDOS_PATH;
-    args[1] = "-v";
-    args[2] = "-w";
-    args[3] = "-p";
-    args[4] = blkdev_get_devpath(dev);
-    args[5] = NULL;
-    rc = logwrap(5, args);
-    free(args[4]);
-#endif
+    int pass = 1;
+    do {
+        char *args[5];
+        args[0] = FSCK_MSDOS_PATH;
+        args[1] = "-p";
+        args[2] = "-f";
+        args[3] = blkdev_get_devpath(dev);
+        args[4] = NULL;
+        rc = logwrap(4, args, 1);
+        free(args[3]);
 
-    if (rc == 0) {
-        LOG_VOL("Filesystem check completed OK");
-        return 0;
-    } else if (rc == 1) {
-        LOG_VOL("Filesystem check failed (general failure)");
-        return -EINVAL;
-    } else if (rc == 2) {
-        LOG_VOL("Filesystem check failed (invalid usage)");
-        return -EIO;
-    } else if (rc == 4) {
-        LOG_VOL("Filesystem check completed (errors fixed)");
-    } else if (rc == 8) {
-        LOG_VOL("Filesystem check failed (not a FAT filesystem)");
-        return -ENODATA;
-    } else {
-        LOG_VOL("Filesystem check failed (unknown exit code %d)", rc);
-        return -EIO;
-    }
+        if (rc == 0) {
+            LOG_VOL("Filesystem check completed OK");
+            return 0;
+        } else if (rc == 2) {
+            LOG_VOL("Filesystem check failed (not a FAT filesystem)");
+            return -ENODATA;
+        } else if (rc == 4) {
+            if (pass++ <= 3) {
+                LOG_VOL("Filesystem modified - rechecking (pass %d)",
+                        pass);
+                continue;
+            } else {
+                LOG_VOL("Failing check after too many rechecks");
+                return -EIO;
+            }
+        } else if (rc == -11) {
+            LOG_VOL("Filesystem check crashed");
+            return -EIO;
+        } else {
+            LOG_VOL("Filesystem check failed (unknown exit code %d)", rc);
+            return -EIO;
+        }
+    } while (0);
     return 0;
 }
 
@@ -113,15 +107,37 @@ int vfat_mount(blkdev_t *dev, volume_t *vol, boolean safe_mode)
         flags |= MS_REMOUNT;
     }
 
+    /*
+     * The mount masks restrict access so that:
+     * 1. The 'system' user cannot access the SD card at all - 
+     *    (protects system_server from grabbing file references)
+     * 2. Group users can RWX
+     * 3. Others can only RX
+     */
     rc = mount(devpath, vol->mount_point, "vfat", flags,
-               "utf8,uid=1000,gid=1000,fmask=711,dmask=700,shortname=mixed");
+               "utf8,uid=1000,gid=1015,fmask=702,dmask=702,shortname=mixed");
 
     if (rc && errno == EROFS) {
         LOGE("vfat_mount(%d:%d, %s): Read only filesystem - retrying mount RO",
              dev->major, dev->minor, vol->mount_point);
         flags |= MS_RDONLY;
         rc = mount(devpath, vol->mount_point, "vfat", flags,
-                   "utf8,uid=1000,gid=1000,fmask=711,dmask=700,shortname=mixed");
+                   "utf8,uid=1000,gid=1015,fmask=702,dmask=702,shortname=mixed");
+    }
+
+    if (rc == 0) {
+        char *lost_path;
+        asprintf(&lost_path, "%s/LOST.DIR", vol->mount_point);
+        if (access(lost_path, F_OK)) {
+            /*
+             * Create a LOST.DIR in the root so we have somewhere to put
+             * lost cluster chains (fsck_msdos doesn't currently do this)
+             */
+            if (mkdir(lost_path, 0755)) {
+                LOGE("Unable to create LOST.DIR (%s)", strerror(errno));
+            }
+        }
+        free(lost_path);
     }
 
 #if VFAT_DEBUG

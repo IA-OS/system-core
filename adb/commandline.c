@@ -96,7 +96,8 @@ void help()
         " -e                            - directs command to the only running emulator.\n"
         "                                 returns an error if more than one emulator is running.\n"
         " -s <serial number>            - directs command to the USB device or emulator with\n"
-        "                                 the given serial number\n"
+        "                                 the given serial number. Overrides ANDROID_SERIAL\n"
+        "                                 envivornment variable.\n"
         " -p <product name or path>     - simple product name like 'sooner', or\n"
         "                                 a relative/absolute path to a product\n"
         "                                 out directory like 'out/target/product/sooner'.\n"
@@ -104,6 +105,7 @@ void help()
         "                                 environment variable is used, which must\n"
         "                                 be an absolute path.\n"
         " devices                       - list all connected devices\n"
+        " connect <host>:<port>         - connect to a device via TCP/IP"
         "\n"
         "device commands:\n"
         "  adb push <local> <remote>    - copy file/dir to device\n"
@@ -147,11 +149,14 @@ void help()
         "  adb get-serialno             - prints: <serial-number>\n"
         "  adb status-window            - continuously print device status for a specified device\n"
         "  adb remount                  - remounts the /system partition on the device read-write\n"
-        "  adb root                     - restarts adb with root permissions\n"
+        "  adb reboot [bootloader|recovery] - reboots the device, optionally into the bootloader or recovery program\n"
+        "  adb root                     - restarts the adbd daemon with root permissions\n"
+        "  adb usb                      - restarts the adbd daemon listening on USB"
+        "  adb tcpip <port>             - restarts the adbd daemon listening on TCP on the specified port"
         "\n"
         "networking:\n"
         "  adb ppp <tty> [parameters]   - Run PPP over USB.\n"
-        " Note: you should not automatically start a PDP connection.\n"
+        " Note: you should not automatically start a PPP connection.\n"
         " <tty> refers to the tty for PPP stream. Eg. dev:/dev/omap_csmi_tty1\n"
         " [parameters] - Eg. defaultroute debug dump local notty usepeerdns\n"
         "\n"
@@ -766,6 +771,8 @@ int adb_commandline(int argc, char **argv)
     }
     // TODO: also try TARGET_PRODUCT/TARGET_DEVICE as a hint
 
+    serial = getenv("ANDROID_SERIAL");
+
         /* modifiers and flags */
     while(argc > 0) {
         if(!strcmp(argv[0],"nodaemon")) {
@@ -846,6 +853,22 @@ top:
         }
     }
 
+    if(!strcmp(argv[0], "connect")) {
+        char *tmp;
+        if (argc != 2) {
+            fprintf(stderr, "Usage: adb connect <host>:<port>\n");
+            return 1;
+        }
+        snprintf(buf, sizeof buf, "host:%s:%s", argv[0], argv[1]);
+        tmp = adb_query(buf);
+        if(tmp) {
+            printf("%s\n", tmp);
+            return 0;
+        } else {
+            return 1;
+        }
+    }
+
     if (!strcmp(argv[0], "emu")) {
         return adb_send_emulator_command(argc, argv);
     }
@@ -904,19 +927,15 @@ top:
         return 0;
     }
 
-    if(!strcmp(argv[0], "remount")) {
-        int fd = adb_connect("remount:");
-        if(fd >= 0) {
-            read_and_dump(fd);
-            adb_close(fd);
-            return 0;
-        }
-        fprintf(stderr,"error: %s\n", adb_error());
-        return 1;
-    }
-
-    if(!strcmp(argv[0], "root")) {
-        int fd = adb_connect("root:");
+    if(!strcmp(argv[0], "remount") || !strcmp(argv[0], "reboot")
+            || !strcmp(argv[0], "tcpip") || !strcmp(argv[0], "usb")
+            || !strcmp(argv[0], "root")) {
+        char command[100];
+        if (argc > 1)
+            snprintf(command, sizeof(command), "%s:%s", argv[0], argv[1]);
+        else
+            snprintf(command, sizeof(command), "%s:", argv[0]);
+        int fd = adb_connect(command);
         if(fd >= 0) {
             read_and_dump(fd);
             adb_close(fd);

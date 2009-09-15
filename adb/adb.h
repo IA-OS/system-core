@@ -33,7 +33,7 @@
 #define ADB_VERSION_MAJOR 1         // Used for help/version information
 #define ADB_VERSION_MINOR 0         // Used for help/version information
 
-#define ADB_SERVER_VERSION    20    // Increment this when we want to force users to start a new adb server
+#define ADB_SERVER_VERSION    25    // Increment this when we want to force users to start a new adb server
 
 typedef struct amessage amessage;
 typedef struct apacket apacket;
@@ -262,15 +262,18 @@ void   run_transport_disconnects( atransport*  t );
 void   kick_transport( atransport*  t );
 
 /* initialize a transport object's func pointers and state */
-int  init_socket_transport(atransport *t, int s, int port);
-void init_usb_transport(atransport *t, usb_handle *usb);
+int  init_socket_transport(atransport *t, int s, int port, int local);
+void init_usb_transport(atransport *t, usb_handle *usb, int state);
 
 /* for MacOS X cleanup */
 void close_usb_devices();
 
 /* cause new transports to be init'd and added to the list */
-void register_socket_transport(int s, const char *serial, int  port);
-void register_usb_transport(usb_handle *h, const char *serial);
+void register_socket_transport(int s, const char *serial, int port, int local);
+void register_usb_transport(usb_handle *h, const char *serial, unsigned writeable);
+
+/* this should only be used for transports with connection_state == CS_NOPERM */
+void unregister_usb_transport(usb_handle *usb);
 
 int service_to_fd(const char *name);
 #if ADB_HOST
@@ -345,11 +348,6 @@ typedef enum {
 #endif
 
 
-/* set this to log to /data/adb/adb_<time>.txt on the device.
- * has no effect if the /data/adb/ directory does not exist.
- */
-#define ADB_DEVICE_LOG 0
-
 #if !TRACE_PACKETS
 #define print_packet(tag,p) do {} while (0)
 #endif
@@ -357,20 +355,12 @@ typedef enum {
 #define ADB_PORT 5037
 #define ADB_LOCAL_TRANSPORT_PORT 5555
 
-// Google's USB Vendor ID
-#define VENDOR_ID_GOOGLE        0x18d1
-// HTC's USB Vendor ID
-#define VENDOR_ID_HTC           0x0bb4
+#define ADB_CLASS              0xff
+#define ADB_SUBCLASS           0x42
+#define ADB_PROTOCOL           0x1
 
-// products for VENDOR_ID_GOOGLE
-#define PRODUCT_ID_SOONER       0xd00d  // Sooner bootloader
-#define PRODUCT_ID_SOONER_COMP  0xdeed  // Sooner composite device
 
-// products for VENDOR_ID_HTC
-#define PRODUCT_ID_DREAM        0x0c01  // Dream bootloader
-#define PRODUCT_ID_DREAM_COMP   0x0c02  // Dream composite device
-
-void local_init();
+void local_init(int port);
 int  local_connect(int  port);
 
 /* usb host/client interface */
@@ -382,7 +372,9 @@ int usb_close(usb_handle *h);
 void usb_kick(usb_handle *h);
 
 /* used for USB device detection */
+#if ADB_HOST
 int is_adb_interface(int vid, int pid, int usb_class, int usb_subclass, int usb_protocol);
+#endif
 
 unsigned host_to_le32(unsigned n);
 int adb_commandline(int argc, char **argv);
@@ -395,7 +387,7 @@ int connection_state(atransport *t);
 #define CS_DEVICE     2
 #define CS_HOST       3
 #define CS_RECOVERY   4
-#define CS_ERROR      5
+#define CS_NOPERM     5 /* Insufficient permissions to communicate with the device */
 
 extern int HOST;
 

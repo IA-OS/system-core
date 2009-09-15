@@ -3,16 +3,20 @@
 ifconfig eth0 10.0.2.15 netmask 255.255.255.0 up
 route add default gw 10.0.2.2 dev eth0
 
-qemud=`getprop.ro.kernel.android.qemud`
-if test -z "$qemud"; then
+qemud=`getprop ro.kernel.android.qemud`
+case "$qemud" in
+    "")
     radio_ril=`getprop ro.kernel.android.ril`
-    if test -z "$radio_ril"; then
+    case "$radio_ril" in
+        "")
         # no need for the radio interface daemon
         # telephony is entirely emulated in Java
         setprop ro.radio.noril yes
         stop ril-daemon
-    fi
-fi
+        ;;
+    esac
+    ;;
+esac
 
 num_dns=`getprop ro.kernel.android.ndns`
 case "$num_dns" in
@@ -33,6 +37,10 @@ case "$boot_anim" in
     0)  setprop debug.sf.nobootanimation 1
     ;;
 esac
+
+# call 'qemu-props' to set system properties from the emulator.
+#
+/system/bin/qemu-props
 
 # this line doesn't really do anything useful. however without it the
 # previous setprop doesn't seem to apply for some really odd reason
