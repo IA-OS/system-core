@@ -225,21 +225,20 @@ static void free_uevent(struct uevent *event)
 
 static char *get_uevent_param(struct uevent *event, char *param_name)
 {
-    int i;
-    char buf[MAX_UEVENT_NAME_LEN];
-
+    int i,len;
+    char *buf;
     for (i = 0; i < UEVENT_PARAMS_MAX; i++) {
         if (!event->param[i])
             break;
-        if (strlen(param_name) >= (MAX_UEVENT_NAME_LEN-1)) {
-            LOGE("%s: the size of %s is to big\n", __FUNCTION__, param_name);
-            break;
+        buf = strchr(event->param[i],'=');
+        if (buf) {
+            len = buf - event->param[i];
+            if ((strlen(param_name) == len) &&
+                (!strncmp(event->param[i], param_name,len))) {
+                return &buf[1];
+            }
         }
-        memcpy(buf,param_name,strlen(param_name));
-        buf[strlen(param_name)] = '=';
-        buf[strlen(param_name)+1] = '\0';
-        if (!strncmp(event->param[i], buf, strlen(buf)))
-            return &event->param[i][strlen(buf)];
+
     }
 
     LOGE("get_uevent_param(): No parameter '%s' found", param_name);
@@ -257,22 +256,22 @@ static int handle_powersupply_event(struct uevent *event)
     char *ps_type = get_uevent_param(event, "POWER_SUPPLY_TYPE");
     char name[PROPERTY_VALUE_MAX];
     int nlen ;
-    int ps_cap;
-    int ps_cap_full = 0;
-    float cap;
+    double ps_cap;
+    double ps_cap_full = 0;
+    double cap;
     int capacity;
 
     if (!strcasecmp(ps_type, "battery")) {
         property_get(POWER_UEVENT_NAME_CHARGE_NOW,name, "POWER_SUPPLY_CAPACITY");
-        ps_cap = atoi(get_uevent_param(event, name));
+        ps_cap = atof(get_uevent_param(event, name));
         nlen = property_get(POWER_UEVENT_NAME_CHARGE_FULL, name, NULL);
         if (nlen > 0)
-            ps_cap_full = atoi(get_uevent_param(event, name));
+            ps_cap_full = atof(get_uevent_param(event, name));
         if (ps_cap_full) {
             cap = (ps_cap/ps_cap_full)*100;
             capacity = (int)cap;
         } else
-            capacity = ps_cap; /* G1 battery */
+            capacity = (int)ps_cap; /* G1 battery */
 
         LOGE("%s: current cap:%d\n", __FUNCTION__, capacity);
         if (capacity < 5)
