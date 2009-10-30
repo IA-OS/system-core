@@ -104,6 +104,8 @@ static struct perms_ devperms[] = {
     { "/dev/alarm",         0664,   AID_SYSTEM,     AID_RADIO,      0 },
     { "/dev/tty0",          0660,   AID_ROOT,       AID_SYSTEM,     0 },
     { "/dev/graphics/",     0660,   AID_ROOT,       AID_GRAPHICS,   1 },
+    /* perm 0666 !? */
+    { "/dev/dri/",          0666,   AID_ROOT,       AID_GRAPHICS,   1 },
     { "/dev/hw3d",          0660,   AID_SYSTEM,     AID_GRAPHICS,   0 },
     { "/dev/input/",        0660,   AID_ROOT,       AID_INPUT,      1 },
     { "/dev/eac",           0660,   AID_ROOT,       AID_AUDIO,      0 },
@@ -379,6 +381,9 @@ static void handle_device_event(struct uevent *uevent)
             /* this should probably be configurable somehow */
         if(!strncmp(uevent->subsystem, "graphics", 8)) {
             base = "/dev/graphics/";
+            mkdir(base, 0755);
+        } else if (!strncmp(uevent->subsystem, "drm", 3)) {
+            base = "/dev/dri/";
             mkdir(base, 0755);
         } else if (!strncmp(uevent->subsystem, "oncrpc", 6)) {
             base = "/dev/oncrpc/";
