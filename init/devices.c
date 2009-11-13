@@ -383,8 +383,9 @@ static void handle_device_event(struct uevent *uevent)
             base = "/dev/graphics/";
             mkdir(base, 0755);
         } else if (!strncmp(uevent->subsystem, "drm", 3)) {
+            const char *hwaccel = getenv("HWACCEL");
             base = "/dev/dri/";
-            mkdir(base, 0755);
+            mkdir(base, !hwaccel || strncmp(hwaccel, "0", 1) ? 0755 : 0000);
         } else if (!strncmp(uevent->subsystem, "oncrpc", 6)) {
             base = "/dev/oncrpc/";
             mkdir(base, 0755);
