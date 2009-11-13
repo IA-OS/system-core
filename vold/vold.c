@@ -124,6 +124,9 @@ int main(int argc, char **argv)
     switch_bootstrap();
 
     bootstrap = 0;
+
+    //USB drive
+    usb_bootstrap();
     /*
      * Main loop
      */

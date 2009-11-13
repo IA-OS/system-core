@@ -227,14 +227,14 @@ static void free_uevent(struct uevent *event)
 
 static char *get_uevent_param(struct uevent *event, char *param_name)
 {
-    int i,len;
+    int i;
     char *buf;
     for (i = 0; i < UEVENT_PARAMS_MAX; i++) {
         if (!event->param[i])
             break;
         buf = strchr(event->param[i],'=');
         if (buf) {
-            len = buf - event->param[i];
+            size_t len = buf - event->param[i];
             if ((strlen(param_name) == len) &&
                 (!strncmp(event->param[i], param_name,len))) {
                 return &buf[1];
