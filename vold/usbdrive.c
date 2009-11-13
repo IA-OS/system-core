@@ -253,32 +253,5 @@ static int usb_bootstrap_sdx(const char *sysfs_path)
 
 static int usb_bootstrap_sdx_partition(const char *sysfs_path)
 {
-    int i;
-    char *uevent_params[5];
-    char tmp[SYSFS_PATH_MAX];
-    FILE *fp;
-    char line[1024];
-    char *uevent, *saveptr;
-    const char *devpath = sysfs_path + 4;
-
-#if DEBUG_USB_BOOTSTRAP
-    LOG_VOL("usb_bootstrap_sdx_partition(%s):", devpath);
-#endif
-
-    if (!read_sysfs_var(line, sizeof(line), devpath, "uevent")) {
-        LOGE("Unable to open '%s/%s' (%s)", sysfs_path, "uevent", strerror(errno));
-        return -errno;
-    }
-    sprintf(tmp, "DEVPATH=%s", devpath);
-    uevent_params[0] = tmp;
-    for (i = 1, uevent = line; i < 4; ++i, uevent = NULL)
-        if (!(uevent_params[i] = strtok_r(uevent, "\n", &saveptr)))
-            break;
-    uevent_params[i] = NULL;
-
-    if (simulate_uevent("block", tmp + 8, "add", uevent_params) < 0) {
-        LOGE("Error simulating uevent (%s)", strerror(errno));
-        return -errno;
-    }
-    return 0;
+    return simulate_add_device("block", sysfs_path + 4);
 }

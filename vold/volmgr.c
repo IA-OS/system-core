@@ -101,6 +101,7 @@ static boolean _check_mounted(const char *mp, int idx)
     char rest[256];
     FILE *fp;
     char line[1024];
+    const char *devname;
     boolean ret = false;
 
     if (mp == NULL)
@@ -113,18 +114,17 @@ static boolean _check_mounted(const char *mp, int idx)
 
     while (fgets(line, sizeof(line), fp)) {
         sscanf(line, "%255s %255s %255s\n", device, mount_path, rest);
-        if (idx == 1) {
-            char *devname = strrchr(device, '/');
-            if (!devname || strcmp(++devname, mp))
-                continue;
-        } else if (idx == 2) {
-            if (strcmp(mount_path, mp))
-                continue;
-        }
+        if (idx == 1)
+            ret = (devname = strrchr(device, '/')) && !strcmp(++devname, mp);
+        else if (idx == 2)
+            ret = !strcmp(mount_path, mp);
+        else
+            break;
 
-        LOGI("%s is already mounted", mp);
-        ret = true;
-        break;
+        if (ret) {
+            LOGI("%s is already mounted", mp);
+            break;
+        }
     }
 
     fclose(fp);

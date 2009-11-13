@@ -81,7 +81,8 @@ int process_inotify_event(int fd);
 int inotify_bootstrap(void);
 
 int process_uevent_message(int socket);
-int simulate_uevent(char *subsystem, char *path, char *action, char **params);
+int simulate_uevent(const char *subsys, const char *path, const char *action, char **params);
+int simulate_add_device(const char *subsys, const char *path);
 
 int mmc_bootstrap(void);
 int usb_bootstrap(void);
@@ -90,6 +91,8 @@ int ums_bootstrap(void);
 int volmgr_bootstrap(void);
 
 int switch_bootstrap(void);
+
+int rfkill_bootstrap(void);
 
 void *read_file(char *filename, ssize_t *_size);
 char *truncate_sysfs_path(char *path, int num_elements_to_remove, char *buffer, int buffer_size);

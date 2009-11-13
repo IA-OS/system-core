@@ -30,6 +30,8 @@
 #include "volmgr.h"
 #include "media.h"
 
+#include "private/android_filesystem_config.h"
+
 #define DEBUG_UEVENT 1
 
 #define UEVENT_PARAMS_MAX 32
@@ -62,6 +64,7 @@ static int handle_block_event(struct uevent *);
 static int handle_bdi_event(struct uevent *);
 static void _cb_blkdev_ok_to_destroy(blkdev_t *dev);
 static int handle_scsi_event(struct uevent *event);
+static int handle_rfkill_event(struct uevent *event);
 
 static struct uevent_dispatch dispatch_table[] = {
     { "switch", handle_switch_event }, 
@@ -71,6 +74,7 @@ static struct uevent_dispatch dispatch_table[] = {
     { "bdi", handle_bdi_event },
     { "power_supply", handle_powersupply_event },
     { "scsi", handle_scsi_event },
+    { "rfkill", handle_rfkill_event },
     { NULL, NULL }
 };
 
@@ -135,7 +139,7 @@ int process_uevent_message(int socket)
     return rc;
 }
 
-int simulate_uevent(char *subsys, char *path, char *action, char **params)
+int simulate_uevent(const char *subsys, const char *path, const char *action, char **params)
 {
     struct uevent *event;
     char tmp[255];
@@ -172,6 +176,28 @@ int simulate_uevent(char *subsys, char *path, char *action, char **params)
     rc = dispatch_uevent(event);
     free_uevent(event);
     return rc;
+}
+
+int simulate_add_device(const char *subsys, const char *path)
+{
+    int i;
+    char line[1024];
+    char devpath[SYSFS_PATH_MAX] = "DEVPATH=";
+    char *uevent, *saveptr, *uevent_params[UEVENT_PARAMS_MAX];
+
+    if (!read_sysfs_var(line, sizeof(line), path, "uevent")) {
+        LOGE("Unable to open '/sys%s/%s' (%s)", path, "uevent", strerror(errno));
+        return -errno;
+    }
+
+    strcat(devpath, path);
+    uevent_params[0] = devpath;
+    for (i = 1, uevent = line; i < UEVENT_PARAMS_MAX - 1; ++i, uevent = NULL)
+        if (!(uevent_params[i] = strtok_r(uevent, "\n", &saveptr)))
+            break;
+    uevent_params[i] = NULL;
+
+    return simulate_uevent(subsys, path, "add", uevent_params);
 }
 
 static int dispatch_uevent(struct uevent *event)
@@ -244,7 +270,7 @@ static char *get_uevent_param(struct uevent *event, char *param_name)
     }
 
     LOGE("get_uevent_param(): No parameter '%s' found", param_name);
-    return NULL;
+    return ""; /* return a valid pointer to avoid checking */
 }
 
 /*
@@ -463,6 +489,21 @@ static int handle_scsi_event(struct uevent *event)
 #endif
     }
 
+    return 0;
+}
+
+static int handle_rfkill_event(struct uevent *event)
+{
+    if (event->action == action_add) {
+        const char *type = get_uevent_param(event, "RFKILL_TYPE");
+        if (!strncmp(type, "bluetooth", 9)) {
+            char path[SYSFS_PATH_MAX];
+            snprintf(path, sizeof(path), "/sys%s/state", event->path);
+            chown(path, AID_BLUETOOTH, AID_BLUETOOTH);
+            chmod(path, S_IRUSR|S_IRGRP|S_IWUSR|S_IWGRP);
+            LOG_VOL("Change permission for %s", path);
+        }
+    }
     return 0;
 }
 

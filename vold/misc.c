@@ -27,9 +27,9 @@
 
 void *read_file(char *filename, ssize_t *_size)
 {
-	int ret, fd;
+	int fd;
 	struct stat sb;
-	ssize_t size;
+	ssize_t size, ret;
 	void *buffer = NULL;
 
 	/* open the file */
@@ -43,12 +43,13 @@ void *read_file(char *filename, ssize_t *_size)
 	size = sb.st_size;
 
 	/* allocate memory for it to be read into */
-	buffer = malloc(size);
+	buffer = malloc(size + 1);
 	if (!buffer)
 		goto bail;
 
 	/* slurp it into our buffer */
 	ret = read(fd, buffer, size);
+	((char *)buffer)[ret] = '\0';
 	if (ret != size)
 		goto bail;
 

@@ -3,7 +3,7 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES:=                \
-                  vold.c       \
+                  vold.c         \
                   cmd_dispatch.c \
                   uevent.c       \
                   mmc.c          \
@@ -19,6 +19,7 @@ LOCAL_SRC_FILES:=                \
                   logwrapper.c   \
                   ProcessKiller.c\
                   switch.c       \
+                  rfkill.c       \
                   format.c       \
                   devmapper.c
 

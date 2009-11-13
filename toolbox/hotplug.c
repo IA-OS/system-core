@@ -1,7 +1,13 @@
 /*
  * Simple hotplug tool
  *
- * by Chih-Wei Huang <cwhuang@linux.org.tw>  2009/11/06
+ * Copyright (C) 2009 The Android-x86 Open Source Project
+ *
+ * Author: Chih-Wei Huang <cwhuang@linux.org.tw>
+ *
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Last updated: 2009/11/14
  *
  */
 
@@ -11,8 +17,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
-#include "private/android_filesystem_config.h"
 
 #define HOTPLUG_LOG	"/tmp/hotplug.log"
 #define FIRMWARE_PATH	"/system/lib/firmware"
@@ -60,25 +64,6 @@ static int load_firmware()
 	return ret;
 }
 
-static int set_rfkill()
-{
-	int ret = -1;
-	if (strcmp(getenv("RFKILL_TYPE"), "bluetooth") == 0) {
-		chdir("/sys");
-		chdir(getenv("DEVPATH") + 1);
-		ret = chown("state", AID_BLUETOOTH, AID_BLUETOOTH);
-		ret |= chmod("state", S_IRUSR|S_IRGRP|S_IWUSR|S_IWGRP);
-#if 0 /* we may not need the hack */
-		if (!strncmp(getenv("RFKILL_NAME"), "hci", 3) && !strcmp(getenv("RFKILL_STATE"), "0")) {
-			int fd = open("state", O_WRONLY);
-			if (fd >= 0)
-				ret |= !(write(fd, "1", 1) == 1);
-		}
-#endif
-	}
-	return ret;
-}
-
 int hotplug_main(int argc, char **argv)
 {
 	int ret = -1;
@@ -108,8 +93,6 @@ int hotplug_main(int argc, char **argv)
 		if (strcmp(action, "add") == 0) {
 			if (strcmp(argv[1], "firmware") == 0)
 				ret = load_firmware();
-			else if (strcmp(argv[1], "rfkill") == 0)
-				ret = set_rfkill();
 		}
 	}
 	return ret;

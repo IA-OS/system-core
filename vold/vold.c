@@ -123,10 +123,14 @@ int main(int argc, char **argv)
     // Switch
     switch_bootstrap();
 
+    // Rfkill interfaces
+    rfkill_bootstrap();
+
     bootstrap = 0;
 
-    //USB drive
+    // USB drive
     usb_bootstrap();
+
     /*
      * Main loop
      */
